@@ -1,0 +1,31 @@
+# Ambientes virtuais (NUNCA versionar — recriar com requirements.txt)
+venv/
+.venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+
+# Saidas / imagens de teste geradas em runtime
+out_*.jpg
+test_*.jpg
+*.log
+
+# Pesos pesados de export intermediario (o modelo final fica em models/)
+*.pt
+*.onnx
+*.torchscript
+
+# IDE / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Nota: models/ppe_ncnn_model/model.ncnn.bin (~12 MB) E versionado de proposito.
+# Se preferir nao versionar binarios, descomente a linha abaixo e use Git LFS:
+# models/**/*.bin

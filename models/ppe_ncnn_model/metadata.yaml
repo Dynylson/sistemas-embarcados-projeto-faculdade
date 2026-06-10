@@ -1,0 +1,28 @@
+description: Ultralytics ppe model trained on /content/drive/MyDrive/Project/Object_Detection/custom_colab.yaml
+author: Ultralytics
+date: '2026-06-09T23:11:28.239091'
+version: 8.4.63
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 320
+- 320
+names:
+  0: Hardhat
+  1: Mask
+  2: NO-Hardhat
+  3: NO-Mask
+  4: NO-Safety Vest
+  5: Person
+  6: Safety Cone
+  7: Safety Vest
+  8: machinery
+  9: vehicle
+args:
+  batch: 1
+  half: false
+channels: 3
+end2end: false

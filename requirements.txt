@@ -1,0 +1,8 @@
+# Inferencia YOLOv8n NCNN *torch-free* — Raspberry Pi 4 (aarch64, Python 3.13)
+# NAO requer torch/ultralytics. O export .pt->NCNN e feito separadamente num PC.
+# Versoes testadas em 2026-06-09 no Pi (Debian 13 / Python 3.13.5).
+
+ncnn>=1.0.20260526
+numpy>=2.0
+opencv-python>=4.10
+pyyaml>=6.0
