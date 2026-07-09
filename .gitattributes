@@ -1,3 +1,6 @@
+# Scripts shell: SEMPRE fim-de-linha LF (CRLF quebra a execução no Linux/Pi)
+*.sh text eol=lf
+
 # Modelos NCNN e áudio: tratar como binário (sem conversão de EOL / diff)
 *.ncnn.bin   binary
 *.ncnn.param binary
