@@ -13,6 +13,13 @@
 - [x] Webcam USB (Logitech C270) reconhecida em `/dev/video0`.
 - [x] **Detecção AO VIVO** com stream MJPEG em `http://10.0.0.165:8000/`.
 - [x] Código versionável no repo (`src/`, `models/`, `requirements.txt`, `.gitignore`).
+- [x] **Áudio de controle de acesso** (portaria): jingle + voz pt-BR — *"Acesso autorizado"* /
+  *"Acesso negado. Coloque o capacete."* no jack P2 (`plughw:0,0`), com debounce/borda.
+- [x] **Autostart via systemd** (`epi-live.service`, enabled) — stream + áudio sobem no boot.
+- [x] **Autorização pelo capacete específico** (classificador YOLOv8-cls NCNN, torch-free):
+  detecta `Person` → recorta cabeça → classifica `capacete_ok`×`nao`. Resolve o boné passando
+  como capacete (regra de cor falhou: capacete e boné azul-marinho + auto-WB da C270).
+  100% na validação; ~6 FPS ao vivo (2 inferências/frame). `norm=plain`, limiar 0.5.
 
 ---
 
@@ -38,8 +45,10 @@
 
   [Service]
   User=projeto-embarcados
+  SupplementaryGroups=audio
   WorkingDirectory=/home/projeto-embarcados/epi
   Environment=EPI_MODEL_DIR=/home/projeto-embarcados/epi/ppe_ncnn_model
+  Environment=EPI_AUDIO_DIR=/home/projeto-embarcados/epi/audio
   ExecStart=/home/projeto-embarcados/epi/venv/bin/python /home/projeto-embarcados/epi/live_ppe.py --width 640 --height 480 --port 8000
   Restart=on-failure
   RestartSec=3

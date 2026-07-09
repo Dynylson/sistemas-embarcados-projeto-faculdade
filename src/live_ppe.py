@@ -14,6 +14,7 @@ Uso (no Pi):
 Para parar: Ctrl+C (ou pkill -f live_ppe.py).
 """
 import argparse
+import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,7 +22,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import cv2
 import numpy as np
 
-from infer_ppe import load_net, infer, decode, configure_targets, MODEL_DIR
+import yaml
+
+from infer_ppe import load_net, infer, decode, configure_targets, MODEL_DIR, ROOT
+from audio_alert import AccessAudio, AUTORIZADO, NEGADO
+import helmet_cls
 
 
 class State:
@@ -49,6 +54,38 @@ def capture_loop(args):
     print(f"[modelo] {MODEL_DIR.name} | alvos: " +
           ", ".join(f"{i}={target[i]}" for i in target_ids), flush=True)
 
+    # Decisao de acesso e por CLASSIFICADOR do capacete (ver helmet_cls), NAO pela
+    # classe Hardhat (que o modelo confunde com bone). Precisamos da classe 'Person'
+    # p/ recortar a cabeca e classificar capacete_ok x nao.
+    names = {int(k): str(v) for k, v in
+             yaml.safe_load(open(MODEL_DIR / "metadata.yaml"))["names"].items()}
+    person_id = next((i for i, n in names.items() if n.lower() == "person"), None)
+    if person_id is None:
+        print("[audio] AVISO: modelo sem classe 'Person'; autorizacao indisponivel.",
+              flush=True)
+    all_ids = target_ids
+    if person_id is not None:
+        all_ids = np.array(sorted(set(target_ids.tolist()) | {person_id}))
+
+    # Classificador do capacete (YOLOv8-cls via NCNN, torch-free). Decide capacete
+    # pelo recorte da cabeca -- robusto a bone (ao contrario de regra de cor).
+    clf = None
+    if args.helmet_model and os.path.isdir(args.helmet_model):
+        clf = helmet_cls.HelmetClassifier(args.helmet_model, threads=max(1, args.threads // 2),
+                                          norm=args.helmet_norm)
+        print(f"[capacete] classificador NCNN {os.path.basename(args.helmet_model)} "
+              f"| norm={args.helmet_norm} | limiar={args.helmet_thresh:.2f}", flush=True)
+    else:
+        print(f"[capacete] AVISO: classificador nao encontrado em {args.helmet_model}; "
+              f"autorizacao desativada (defina EPI_HELMET_MODEL).", flush=True)
+
+    audio = AccessAudio(args.audio_dir, device=args.audio_device, enabled=args.audio,
+                        stable_frames=args.audio_stable, min_interval_s=args.audio_interval)
+    audio.start()
+    if args.audio:
+        print(f"[audio] ativo | dir={args.audio_dir} | estabiliza={args.audio_stable} frames",
+              flush=True)
+
     net = load_net(MODEL_DIR, args.threads)
     cap = cv2.VideoCapture(args.device, cv2.CAP_V4L2)
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
@@ -72,26 +109,54 @@ def capture_loop(args):
             time.sleep(0.01)
             continue
         out, ms, r, px, py = infer(net, frame, args.imgsz)
-        dets = decode(out, r, px, py, frame, args.conf, args.iou, target_ids)
+        dets = decode(out, r, px, py, frame, args.conf, args.iou, all_ids)
+
+        # Desenha coletes (verde) se o modelo achar; capacete e decidido por cor.
         for c, conf, (a, b, x, y) in dets:
-            cv2.rectangle(frame, (int(a), int(b)), (int(x), int(y)), colors[c], 2)
-            cv2.putText(frame, f"{target[c]} {conf:.2f}", (int(a), int(b) - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, colors[c], 2)
+            if target.get(c) == "colete":
+                cv2.rectangle(frame, (int(a), int(b)), (int(x), int(y)), (0, 255, 0), 2)
+                cv2.putText(frame, f"colete {conf:.2f}", (int(a), int(b) - 6),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        # AUTORIZACAO POR CLASSIFICADOR: maior pessoa (mais proxima da portaria),
+        # recorta a cabeca e classifica capacete_ok x nao.
+        persons = [d for d in dets if d[0] == person_id]
+        prob = 0.0
+        has_helmet = False
+        if persons and clf is not None:
+            _, _, pbox = max(persons, key=lambda d: (d[2][2] - d[2][0]) * (d[2][3] - d[2][1]))
+            crop = helmet_cls.head_crop(frame, pbox)
+            if crop is not None:
+                prob = clf.prob_capacete(crop)
+                has_helmet = prob >= args.helmet_thresh
+            a, b, x, y = pbox
+            hy2 = int(b + 0.42 * (y - b))
+            hcol = (0, 200, 0) if has_helmet else (0, 0, 255)
+            cv2.rectangle(frame, (int(a), int(b)), (int(x), hy2), hcol, 2)
+            cv2.putText(frame, f"capacete {prob*100:.0f}%", (int(a), max(18, int(b) - 8)),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, hcol, 2)
+        no_helmet = bool(persons) and clf is not None and not has_helmet
+        gate_state = audio.update(has_helmet, no_helmet)
+
         now = time.perf_counter()
         dt = now - t_prev
         t_prev = now
         inst = 1.0 / dt if dt > 0 else 0.0
         ema = inst if ema is None else 0.9 * ema + 0.1 * inst
-        n_cap = sum(1 for c, _, _ in dets if target.get(c) == "capacete")
-        n_col = sum(1 for c, _, _ in dets if target.get(c) == "colete")
-        cv2.putText(frame, f"FPS:{ema:4.1f}  inf:{ms:4.0f}ms  capacete:{n_cap}  colete:{n_col}",
+        cv2.putText(frame, f"FPS:{ema:4.1f}  inf:{ms:4.0f}ms  pessoas:{len(persons)}  capacete:{prob*100:.0f}%",
                     (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        banner = {AUTORIZADO: ("ACESSO AUTORIZADO", (0, 200, 0)),
+                  NEGADO: ("ACESSO NEGADO", (0, 0, 255))}.get(gate_state)
+        if banner:
+            txt, col = banner
+            cv2.putText(frame, txt, (10, 54), cv2.FONT_HERSHEY_SIMPLEX, 0.9, col, 2)
         ok2, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if ok2:
             with state.lock:
                 state.jpeg = buf.tobytes()
                 state.fps = ema
     cap.release()
+    audio.stop()
 
 
 PAGE = (b"<html><head><title>EPI ao vivo</title></head>"
@@ -146,6 +211,27 @@ def main():
     ap.add_argument("--iou", type=float, default=0.45)
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--port", type=int, default=8000)
+    # --- audio (controle de acesso por voz) ---
+    ap.add_argument("--audio", dest="audio", action="store_true", default=True,
+                    help="habilita disparo de voz (padrao)")
+    ap.add_argument("--no-audio", dest="audio", action="store_false",
+                    help="desabilita o audio")
+    ap.add_argument("--audio-dir", default=os.environ.get("EPI_AUDIO_DIR", str(ROOT / "audio")),
+                    help="pasta com autorizado.wav / negado.wav (ou defina EPI_AUDIO_DIR)")
+    ap.add_argument("--audio-device", default=os.environ.get("EPI_AUDIO_DEVICE"),
+                    help="dispositivo ALSA do aplay, ex.: plughw:1,0 (default: padrao do sistema)")
+    ap.add_argument("--audio-stable", type=int, default=5,
+                    help="frames estaveis p/ firmar a decisao antes de falar")
+    ap.add_argument("--audio-interval", type=float, default=2.0,
+                    help="intervalo minimo (s) entre falas")
+    # --- capacete por classificador (autorizacao) ---
+    ap.add_argument("--helmet-model",
+                    default=os.environ.get("EPI_HELMET_MODEL", str(ROOT / "models" / "helmet_cls_ncnn_model")),
+                    help="pasta do modelo YOLOv8-cls NCNN (ou defina EPI_HELMET_MODEL)")
+    ap.add_argument("--helmet-thresh", type=float, default=0.5,
+                    help="prob minima de 'capacete_ok' p/ autorizar")
+    ap.add_argument("--helmet-norm", default="plain", choices=["plain", "imagenet"],
+                    help="normalizacao de entrada do classificador (calibrado: plain)")
     args = ap.parse_args()
 
     th = threading.Thread(target=capture_loop, args=(args,), daemon=True)

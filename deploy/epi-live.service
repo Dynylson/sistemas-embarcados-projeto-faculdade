@@ -1,0 +1,19 @@
+[Unit]
+Description=EPI live detection (capacete+colete) + audio + stream MJPEG
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+User=projeto-embarcados
+SupplementaryGroups=audio
+WorkingDirectory=/home/projeto-embarcados/epi
+Environment=EPI_MODEL_DIR=/home/projeto-embarcados/epi/ppe_ncnn_model
+Environment=EPI_AUDIO_DIR=/home/projeto-embarcados/epi/audio
+Environment=EPI_AUDIO_DEVICE=plughw:0,0
+Environment=EPI_HELMET_MODEL=/home/projeto-embarcados/epi/helmet_cls_ncnn_model
+ExecStart=/home/projeto-embarcados/epi/venv/bin/python /home/projeto-embarcados/epi/live_ppe.py --width 640 --height 480 --port 8000 --audio-device plughw:0,0
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

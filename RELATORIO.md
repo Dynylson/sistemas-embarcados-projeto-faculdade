@@ -30,7 +30,7 @@ O `CLAUDE.md` indicava `pi@raspberrypi.local`, mas a realidade do dispositivo é
 - **Host:** conectar por **IP** — `10.0.0.165` (o mDNS `raspberrypi.local` **não resolve** nesta rede/Windows).
 - **Usuário:** `projeto-embarcados` (definido no Raspberry Pi Imager; **não** é `pi`).
 - **Chave:** `~/.ssh/id_raspberry` (ED25519, sem passphrase). Autenticação **só por chave** (senha SSH desabilitada).
-- **sudo:** senha `1234`.
+- **sudo:** senha definida na configuração do Imager (**não versionada** — manter fora do repositório).
 
 ```bash
 ssh -i ~/.ssh/id_raspberry -o IdentitiesOnly=yes projeto-embarcados@10.0.0.165

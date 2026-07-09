@@ -49,6 +49,18 @@ def configure_targets(model_dir):
     return target, colors
 
 
+def find_no_helmet_id(model_dir):
+    """Indice da classe 'sem capacete' (NO-Hardhat), ou None se o modelo nao tiver.
+    Usado no controle de acesso: presenca de NO-Hardhat => negar."""
+    names = yaml.safe_load(open(model_dir / "metadata.yaml"))["names"]
+    for i, raw in names.items():
+        n = str(raw).lower()
+        neg = any(n.startswith(p) for p in ("no-", "no_", "no "))
+        if neg and ("hardhat" in n or "helmet" in n or "hard_hat" in n):
+            return int(i)
+    return None
+
+
 def load_net(model_dir, threads):
     net = ncnn.Net()
     net.opt.num_threads = threads

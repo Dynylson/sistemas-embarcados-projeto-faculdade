@@ -15,6 +15,11 @@ out_*.jpg
 test_*.jpg
 *.log
 
+# Dataset de treino do classificador + artefatos do ultralytics (nao versionar)
+data/
+runs/
+audio/voice/
+
 # Pesos pesados de export intermediario (o modelo final fica em models/)
 *.pt
 *.onnx
