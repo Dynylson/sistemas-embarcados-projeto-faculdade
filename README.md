@@ -40,46 +40,70 @@ Por isso a arquitetura é:
 ├── deploy/
 │   └── epi-live.service   # unit systemd (stream + áudio + autorização no boot)
 └── models/
-    └── ppe_ncnn_model/    # modelo YOLOv8n NCNN (Hansung-Cho, MIT) — capacete=0, colete=7
+    ├── ppe_ncnn_model/          # detector YOLOv8n NCNN (Hansung-Cho, MIT) — capacete=0, colete=7
+    │   ├── model.ncnn.param
+    │   ├── model.ncnn.bin
+    │   └── metadata.yaml
+    └── helmet_cls_ncnn_model/   # classificador do capacete (YOLOv8n-cls NCNN) — capacete_ok x nao
         ├── model.ncnn.param
         ├── model.ncnn.bin
         └── metadata.yaml
 ```
 
-## Quickstart (no Raspberry Pi)
+> **Os dois modelos e os WAVs já estão versionados** — um clone tem tudo pra rodar (só falta
+> instalar as dependências e o hardware; veja abaixo).
+
+## Como rodar (do zero, a partir do clone) — no Raspberry Pi
+
+Pré-requisitos de **hardware**: webcam USB em `/dev/video0` (testado: Logitech C270) e,
+para o áudio, um alto-falante/fone no **conector P2 (3,5 mm)**.
 
 ```bash
-# deps de sistema (uma vez)
-sudo apt-get install -y python3-venv libgl1 libglib2.0-0 libgomp1
+# 1) clonar
+git clone https://github.com/Dynylson/sistemas-embarcados-projeto-faculdade.git epi && cd epi
 
-# ambiente
+# 2) dependências de sistema (uma vez) — inclui aplay p/ o áudio
+sudo apt-get install -y python3-venv libgl1 libglib2.0-0 libgomp1 alsa-utils
+
+# 3) ambiente Python (o venv NÃO vai no git — recria pelo requirements.txt)
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
-# rodar (imagem local, URL, ou exemplo padrão)
-python src/infer_ppe.py caminho/para/foto.jpg
-python src/infer_ppe.py https://commons.wikimedia.org/wiki/Special:FilePath/Highvis.jpg
+# 4) rodar AO VIVO (stream + áudio + autorização pelo capacete)
+python src/live_ppe.py --width 640 --height 480 --port 8000 --audio-device plughw:0,0
 ```
 
-Saída: tempo de inferência, contagem de **capacete/colete** com confiança e bbox, e uma imagem
-anotada `out_ppe.jpg` (capacete = laranja, colete = verde).
+Abra no navegador de **outro PC na mesma rede**: `http://<ip-do-pi>:8000/`
+(descubra o IP com `hostname -I` no Pi). Parar: `Ctrl+C`.
 
-Opções: `--imgsz 320 --conf 0.35 --iou 0.45 --threads 4 --runs 20`.
-O diretório do modelo pode ser trocado via `EPI_MODEL_DIR=/caminho`.
+Os defaults já encontram os dois modelos (`models/`) e os WAVs (`audio/`) dentro do repo —
+**não precisa configurar caminho**. Só o **dispositivo de áudio** costuma precisar de ajuste:
+no P2 é `plughw:0,0`; descubra o seu com `aplay -l`.
 
-## Ao vivo (webcam USB + stream MJPEG)
+Flags úteis: `--device 0` (câmera) · `--conf 0.45` · `--threads 4` · `--no-audio` ·
+`--helmet-thresh 0.5` (limiar do classificador). O caminho de cada peça também pode vir por
+ambiente: `EPI_MODEL_DIR`, `EPI_HELMET_MODEL`, `EPI_AUDIO_DIR`, `EPI_AUDIO_DEVICE`.
 
-Detecção em tempo real com uma webcam USB (testado: Logitech C270). Como o OS é headless,
-o resultado é servido por HTTP — abra no navegador de outra máquina:
+### Teste rápido só do detector (imagem única)
 
 ```bash
-# no Pi (modelo via EPI_MODEL_DIR se o layout não for o do repo)
-python src/live_ppe.py --width 640 --height 480 --port 8000
-# depois, no PC:  http://<ip-do-pi>:8000/
+python src/infer_ppe.py caminho/para/foto.jpg     # ou uma URL, ou sem argumento (exemplo padrão)
 ```
 
-Mostra as caixas de capacete/colete e um overlay com FPS/tempo de inferência.
-Opções: `--device 0 --conf 0.4 --threads 4`. Parar: `Ctrl+C` (ou `pkill -f live_ppe.py`).
+Saída: tempo de inferência, contagem de **capacete/colete** com confiança/bbox e a imagem
+anotada `out_ppe.jpg` (capacete = laranja, colete = verde).
+
+### Subir sozinho no boot (systemd)
+
+`deploy/epi-live.service` sobe o stream+áudio+autorização no boot e reinicia se cair.
+**Atenção:** o unit tem caminhos fixos do layout `~/epi`; se você clonou em outro lugar,
+ajuste `WorkingDirectory`, `ExecStart` e as linhas `EPI_*` antes de instalar:
+
+```bash
+sudo cp deploy/epi-live.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now epi-live.service
+sudo systemctl status epi-live.service
+```
 
 ## Áudio — controle de acesso por voz (portaria)
 
