@@ -39,6 +39,7 @@ Por isso a arquitetura é:
 │   └── verify_cls_ncnn.py     # valida o classificador NCNN nos recortes (Pi)
 ├── deploy/
 │   └── epi-live.service   # unit systemd (stream + áudio + autorização no boot)
+├── setup.sh               # instala deps de sistema + venv + libs (rodar no Pi)
 └── models/
     ├── ppe_ncnn_model/          # detector YOLOv8n NCNN (Hansung-Cho, MIT) — capacete=0, colete=7
     │   ├── model.ncnn.param
@@ -62,16 +63,22 @@ para o áudio, um alto-falante/fone no **conector P2 (3,5 mm)**.
 # 1) clonar
 git clone https://github.com/Dynylson/sistemas-embarcados-projeto-faculdade.git epi && cd epi
 
-# 2) dependências de sistema (uma vez) — inclui aplay p/ o áudio
-sudo apt-get install -y python3-venv libgl1 libglib2.0-0 libgomp1 alsa-utils
+# 2) setup automático: deps de sistema + venv + libs Python (idempotente)
+./setup.sh
 
-# 3) ambiente Python (o venv NÃO vai no git — recria pelo requirements.txt)
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
-
-# 4) rodar AO VIVO (stream + áudio + autorização pelo capacete)
+# 3) rodar AO VIVO (stream + áudio + autorização pelo capacete)
+source venv/bin/activate
 python src/live_ppe.py --width 640 --height 480 --port 8000 --audio-device plughw:0,0
 ```
+
+<details><summary>…ou faça os passos do <code>setup.sh</code> manualmente</summary>
+
+```bash
+sudo apt-get install -y python3-venv libgl1 libglib2.0-0 libgomp1 alsa-utils
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+```
+</details>
 
 Abra no navegador de **outro PC na mesma rede**: `http://<ip-do-pi>:8000/`
 (descubra o IP com `hostname -I` no Pi). Parar: `Ctrl+C`.
