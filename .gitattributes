@@ -1,0 +1,5 @@
+# Modelos NCNN e áudio: tratar como binário (sem conversão de EOL / diff)
+*.ncnn.bin   binary
+*.ncnn.param binary
+*.wav        binary
+*.pt         binary
