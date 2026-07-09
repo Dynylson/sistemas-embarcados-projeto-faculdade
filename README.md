@@ -60,6 +60,9 @@ Pré-requisitos de **hardware**: webcam USB em `/dev/video0` (testado: Logitech 
 para o áudio, um alto-falante/fone no **conector P2 (3,5 mm)**.
 
 ```bash
+# 0) git (se ainda não tiver no Pi)
+sudo apt-get update && sudo apt-get install -y git
+
 # 1) clonar
 git clone https://github.com/Dynylson/sistemas-embarcados-projeto-faculdade.git epi && cd epi
 
